@@ -8,7 +8,8 @@ import {
   Type, 
   Image as ImageIcon, 
   MousePointer, 
-  Slash
+  Slash,
+  Pen
 } from 'lucide-react'
 
 interface ToolbarProps {
@@ -149,6 +150,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
           tooltip="Line (L)"
           selected={selectedTool === 'line'}
           onClick={() => setTool('line')}
+        />
+
+        <ToolButton 
+          icon={<Pen size={18} />} 
+          tooltip="Pen (P)"
+          selected={selectedTool === 'pen'}
+          onClick={() => setTool('pen')}
         />
       </div>
     </div>

@@ -2,11 +2,13 @@
 
 import { useRef, useEffect, useState } from 'react'
 import { Image as KonvaImage } from 'react-konva'
+import { getFilterCSS, ImageFilters } from '../ImageFilters'
+import type Konva from 'konva'
 
 interface ImageElementProps {
   shapeProps: any
   isSelected: boolean
-  onSelect: () => void
+  onSelect: (e?: any) => void
   onChange: (props: any) => void
 }
 
@@ -16,7 +18,7 @@ const ImageElement: React.FC<ImageElementProps> = ({
   onSelect,
   onChange,
 }) => {
-  const shapeRef = useRef<any>(null)
+  const shapeRef = useRef<Konva.Image>(null)
   const [image, setImage] = useState<HTMLImageElement | null>(null)
 
   useEffect(() => {
@@ -26,8 +28,31 @@ const ImageElement: React.FC<ImageElementProps> = ({
       img.onload = () => {
         setImage(img)
       }
+      img.onerror = () => {
+        console.error("Error loading image:", shapeProps.src);
+      }
     }
   }, [shapeProps.src])
+
+  useEffect(() => {
+    if (shapeRef.current) {
+      const node = shapeRef.current;
+      const activeFilters: Konva.Filter[] = [];
+      const currentFilters = shapeProps.filters as ImageFilters || {};
+
+      if (currentFilters.blur && currentFilters.blur > 0) activeFilters.push(Konva.Filters.Blur_);
+      if (currentFilters.brightness) activeFilters.push(Konva.Filters.Brighten);
+      if (currentFilters.grayscale && currentFilters.grayscale > 0) activeFilters.push(Konva.Filters.Grayscale);
+      if (currentFilters.sepia && currentFilters.sepia > 0) activeFilters.push(Konva.Filters.Sepia);
+      
+      node.filters(activeFilters);
+      if (currentFilters.blur) node.blurRadius(currentFilters.blur);
+      if (currentFilters.brightness) node.brightness((currentFilters.brightness - 100) / 100);
+
+      node.cache();
+      node.getLayer()?.batchDraw();
+    }
+  }, [shapeProps.filters, image]);
 
   // Update transformer on shape changes
   useEffect(() => {

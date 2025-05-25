@@ -19,12 +19,17 @@ import {
   AlignRight,
   Bold,
   Italic,
-  Underline
+  Underline,
+  Filter,
+  Palette
 } from 'lucide-react'
-import { CanvasElement } from '../types/canvas'
+import { CanvasElement, GradientConfig } from '../types/canvas'
+import ImageFiltersEditor, { ImageFilters } from './ImageFilters'
+import GradientEditor from './GradientEditor'
 
 interface PropertyPanelProps {
   selectedElement: CanvasElement | null
+  selectedElements?: CanvasElement[]
   onUpdate: (id: string, newProps: Partial<CanvasElement>) => void
   onDelete: (id: string) => void
   onBringForward: (id: string) => void
@@ -33,11 +38,28 @@ interface PropertyPanelProps {
 
 const PropertyPanel: React.FC<PropertyPanelProps> = ({
   selectedElement,
+  selectedElements = [],
   onUpdate,
   onDelete,
   onBringForward,
   onSendBackward,
 }) => {
+  // Handle multiple selection display
+  if (selectedElements.length > 1) {
+    return (
+      <div className="w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+            <SlidersHorizontal className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Multiple Selection</h3>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">{selectedElements.length} elements selected</p>
+          <p className="text-gray-400 dark:text-gray-500 text-xs mt-2">Use alignment tools above the canvas</p>
+        </div>
+      </div>
+    )
+  }
+  
   if (!selectedElement) {
     return (
       <div className="w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 p-6 shadow-sm">
@@ -77,6 +99,38 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
   const handleTextAlignChange = (value: string) => {
     onUpdate(selectedElement.id, { align: value as 'left' | 'center' | 'right' })
+  }
+
+  const handleImageFilterChange = (newFilters: ImageFilters) => {
+    if (selectedElement && selectedElement.type === 'image') {
+      onUpdate(selectedElement.id, { filters: newFilters } as Partial<CanvasElement>)
+    }
+  }
+
+  const handleGradientChange = (newGradient: GradientConfig) => {
+    if (selectedElement) {
+      onUpdate(selectedElement.id, { gradient: newGradient, fillType: 'gradient' })
+    }
+  }
+
+  const handleFillTypeChange = (fillType: 'solid' | 'gradient') => {
+    if (selectedElement) {
+      let newProps: Partial<CanvasElement> = { fillType };
+      if (fillType === 'solid' && !selectedElement.fill) {
+        newProps.fill = '#ffffff';
+      }
+      if (fillType === 'gradient' && !selectedElement.gradient) {
+        newProps.gradient = {
+          type: 'linear',
+          angle: 90,
+          stops: [
+            { color: '#ffffff', position: 0 },
+            { color: '#000000', position: 100 },
+          ],
+        };
+      }
+      onUpdate(selectedElement.id, newProps)
+    }
   }
 
   const handleShadowToggle = () => {
@@ -317,16 +371,53 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
         {/* Appearance Section */}
         <PropertySection title="Appearance">
-          {/* Fill color for shapes and text */}
+          {/* Fill Type and Color/Gradient for shapes and text */}
           {(selectedElement.type === 'rectangle' || 
             selectedElement.type === 'circle' || 
             selectedElement.type === 'text') && (
-            <PropertyField label="Fill Color">
-              <ColorInput
-                value={selectedElement.fill || '#000000'}
-                onChange={(value) => handleColorChange('fill', value)}
-              />
-            </PropertyField>
+            <>
+              <PropertyField label="Fill Type">
+                <div className="flex space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                  <button
+                    className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+                      (selectedElement.fillType === 'solid' || !selectedElement.fillType) 
+                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm' 
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                    onClick={() => handleFillTypeChange('solid')}
+                  >
+                    Solid
+                  </button>
+                  <button
+                    className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+                      selectedElement.fillType === 'gradient' 
+                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm' 
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                    }`}
+                    onClick={() => handleFillTypeChange('gradient')}
+                  >
+                    Gradient
+                  </button>
+                </div>
+              </PropertyField>
+
+              {(selectedElement.fillType === 'solid' || !selectedElement.fillType) && (
+                <PropertyField label="Fill Color">
+                  <ColorInput
+                    value={selectedElement.fill || '#000000'}
+                    onChange={(value) => handleColorChange('fill', value)}
+                  />
+                </PropertyField>
+              )}
+              {selectedElement.fillType === 'gradient' && (
+                <PropertyField label="Gradient">
+                  <GradientEditor 
+                    value={selectedElement.gradient || { type: 'linear', angle: 90, stops: [{color: '#fff', position: 0}, {color: '#000', position: 100}] }}
+                    onChange={handleGradientChange} 
+                  />
+                </PropertyField>
+              )}
+            </>
           )}
 
           {/* Stroke color and width for shapes and lines */}
@@ -432,6 +523,16 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 </div>
               </div>
             )}
+          </PropertySection>
+        )}
+
+        {/* Image Filter Properties */}
+        {selectedElement.type === 'image' && (
+          <PropertySection title="Image Filters">
+            <ImageFiltersEditor
+              filters={selectedElement.filters || {}}
+              onChange={handleImageFilterChange}
+            />
           </PropertySection>
         )}
       </div>

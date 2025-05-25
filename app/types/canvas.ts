@@ -1,13 +1,15 @@
 export interface CanvasElement {
   id: string;
-  type: 'rectangle' | 'circle' | 'text' | 'image' | 'line';
+  type: 'rectangle' | 'circle' | 'text' | 'image' | 'line' | 'path';
   x: number;
   y: number;
   width?: number;
   height?: number;
   radius?: number;
   rotation?: number;
+  fillType?: 'solid' | 'gradient';
   fill?: string;
+  gradient?: GradientConfig;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
@@ -27,6 +29,17 @@ export interface CanvasElement {
   src?: string;
   isNew?: boolean;
   locked?: boolean;
+  pathData?: string;
+  closed?: boolean;
+  filters?: {
+    brightness?: number;
+    contrast?: number;
+    saturation?: number;
+    blur?: number;
+    grayscale?: number;
+    sepia?: number;
+    hueRotate?: number;
+  };
 }
 
 export interface StageConfig {
@@ -35,8 +48,24 @@ export interface StageConfig {
 }
 
 export interface ToolType {
-  id: 'select' | 'text' | 'rectangle' | 'circle' | 'line' | 'image';
+  id: 'select' | 'text' | 'rectangle' | 'circle' | 'line' | 'image' | 'pen';
   name: string;
   icon: string;
   shortcut?: string;
+}
+
+export interface GradientStop {
+  color: string;
+  position: number; // 0-100
+}
+
+export interface GradientConfig {
+  type: 'linear' | 'radial';
+  angle?: number; // for linear gradients
+  stops: GradientStop[];
+  // Konva specific points if needed, or derive them
+  start?: { x: number; y: number }; 
+  end?: { x: number; y: number };
+  startRadius?: number;
+  endRadius?: number;
 } 

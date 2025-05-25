@@ -3,11 +3,11 @@
 import React from 'react'
 import {
   AlignLeft,
-  AlignCenterHorizontal,
+  AlignCenter,
   AlignRight,
-  AlignTop,
-  AlignCenterVertical,
-  AlignBottom,
+  AlignVerticalJustifyStart,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
   Maximize2
 } from 'lucide-react'
 import { CanvasElement } from '../types/canvas'
@@ -205,7 +205,7 @@ const AlignmentTools: React.FC<AlignmentToolsProps> = ({
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             title="Align Center"
           >
-            <AlignCenterHorizontal className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            <AlignCenter className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
           <button
             onClick={alignRight}
@@ -220,21 +220,21 @@ const AlignmentTools: React.FC<AlignmentToolsProps> = ({
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             title="Align Top"
           >
-            <AlignTop className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            <AlignVerticalJustifyStart className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
           <button
             onClick={alignMiddle}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             title="Align Middle"
           >
-            <AlignCenterVertical className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            <AlignVerticalJustifyCenter className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
           <button
             onClick={alignBottom}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             title="Align Bottom"
           >
-            <AlignBottom className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            <AlignVerticalJustifyEnd className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
         </div>
       </div>

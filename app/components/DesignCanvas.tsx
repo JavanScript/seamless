@@ -13,8 +13,9 @@ import type Konva from 'konva' // Import Konva type for Stage node
 interface DesignCanvasProps {
   elements: any[]
   selectedElement: any
+  selectedElements?: any[]
   tool: string
-  onSelect: (element: any | null) => void
+  onSelect: (element: any | null, isMultiSelect?: boolean) => void
   onUpdate: (id: string, props: any) => void
   onAddElement: (element: any) => void
   onDelete: (id: string) => void
@@ -35,6 +36,7 @@ interface DesignCanvasProps {
 const DesignCanvas: React.FC<DesignCanvasProps> = ({
   elements,
   selectedElement,
+  selectedElements = [],
   tool,
   onSelect,
   onUpdate,
@@ -60,9 +62,18 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({
   // Set up keyboard events for delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' && selectedElement) {
-        onDelete(selectedElement.id)
-        onSelect(null)
+      if (e.key === 'Delete') {
+        if (selectedElements.length > 0) {
+          // Delete all selected elements
+          selectedElements.forEach(element => {
+            onDelete(element.id)
+          })
+          onSelect(null)
+        } else if (selectedElement) {
+          // Delete single selected element
+          onDelete(selectedElement.id)
+          onSelect(null)
+        }
       }
     }
 
@@ -70,31 +81,48 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selectedElement, onDelete, onSelect])
+  }, [selectedElement, selectedElements, onDelete, onSelect])
 
-  // Attach transformer to selected element
+  // Attach transformer to selected element(s)
   useEffect(() => {
-    if (transformerRef.current) {
+    if (transformerRef.current && layerRef.current) {
       const tr = transformerRef.current;
-      if (selectedElement && layerRef.current) {
+      const nodes: Konva.Node[] = [];
+      
+      // If we have multiple selected elements
+      if (selectedElements.length > 0) {
+        selectedElements.forEach(element => {
+          const node = layerRef.current!.findOne(`#${element.id}`);
+          if (node) {
+            nodes.push(node);
+          }
+        });
+      } 
+      // Otherwise, if we have a single selected element
+      else if (selectedElement) {
         const node = layerRef.current.findOne(`#${selectedElement.id}`);
         if (node) {
-          tr.nodes([node]);
-        } else {
-          tr.nodes([]);
+          nodes.push(node);
         }
-      } else {
-        tr.nodes([]);
       }
+      
+      tr.nodes(nodes);
       // Force a redraw of the layer containing the transformer
       tr.getLayer()?.batchDraw();
     }
-  }, [selectedElement, elements]); // Add elements to dependency array to re-evaluate when element order changes
+  }, [selectedElement, selectedElements, elements]); // Add elements to dependency array to re-evaluate when element order changes
 
   const getPointerPosition = (): { x: number; y: number } | null => {
     const stage = stageRef.current;
     if (!stage) return null;
-    return stage.getPointerPosition();
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return null;
+    
+    // Convert screen coordinates to canvas coordinates accounting for zoom and pan
+    return {
+      x: (pointerPos.x - stagePosition.x) / stageScale,
+      y: (pointerPos.y - stagePosition.y) / stageScale
+    };
   };
 
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -309,8 +337,11 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({
                     <Rectangle
                       key={element.id}
                       shapeProps={element}
-                      isSelected={selectedElement?.id === element.id}
-                      onSelect={() => onSelect(element)}
+                      isSelected={selectedElement?.id === element.id || selectedElements.some(el => el.id === element.id)}
+                      onSelect={(e) => {
+                        const isMultiSelect = e?.evt?.ctrlKey || e?.evt?.metaKey
+                        onSelect(element, isMultiSelect)
+                      }}
                       onChange={(newProps) => onUpdate(element.id, newProps)}
                     />
                   )
@@ -319,8 +350,11 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({
                     <Circle
                       key={element.id}
                       shapeProps={element}
-                      isSelected={selectedElement?.id === element.id}
-                      onSelect={() => onSelect(element)}
+                      isSelected={selectedElement?.id === element.id || selectedElements.some(el => el.id === element.id)}
+                      onSelect={(e) => {
+                        const isMultiSelect = e?.evt?.ctrlKey || e?.evt?.metaKey
+                        onSelect(element, isMultiSelect)
+                      }}
                       onChange={(newProps) => onUpdate(element.id, newProps)}
                     />
                   )
@@ -329,8 +363,11 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({
                     <TextElement
                       key={element.id}
                       shapeProps={element}
-                      isSelected={selectedElement?.id === element.id}
-                      onSelect={() => onSelect(element)}
+                      isSelected={selectedElement?.id === element.id || selectedElements.some(el => el.id === element.id)}
+                      onSelect={(e) => {
+                        const isMultiSelect = e?.evt?.ctrlKey || e?.evt?.metaKey
+                        onSelect(element, isMultiSelect)
+                      }}
                       onChange={(newProps) => onUpdate(element.id, newProps)}
                       isNew={element.isNew}
                     />
@@ -340,8 +377,11 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({
                     <ImageElement
                       key={element.id}
                       shapeProps={element}
-                      isSelected={selectedElement?.id === element.id}
-                      onSelect={() => onSelect(element)}
+                      isSelected={selectedElement?.id === element.id || selectedElements.some(el => el.id === element.id)}
+                      onSelect={(e) => {
+                        const isMultiSelect = e?.evt?.ctrlKey || e?.evt?.metaKey
+                        onSelect(element, isMultiSelect)
+                      }}
                       onChange={(newProps) => onUpdate(element.id, newProps)}
                     />
                   )
@@ -350,8 +390,11 @@ const DesignCanvas: React.FC<DesignCanvasProps> = ({
                     <Line
                       key={element.id}
                       shapeProps={element}
-                      isSelected={selectedElement?.id === element.id}
-                      onSelect={() => onSelect(element)}
+                      isSelected={selectedElement?.id === element.id || selectedElements.some(el => el.id === element.id)}
+                      onSelect={(e) => {
+                        const isMultiSelect = e?.evt?.ctrlKey || e?.evt?.metaKey
+                        onSelect(element, isMultiSelect)
+                      }}
                       onChange={(newProps) => onUpdate(element.id, newProps)}
                     />
                   )

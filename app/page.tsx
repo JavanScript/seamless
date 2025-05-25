@@ -6,6 +6,10 @@ import Toolbar from './components/Toolbar'
 import PropertyPanel from './components/PropertyPanel'
 import LayersPanel from './components/LayersPanel'
 import ExportPanel from './components/ExportPanel'
+import TemplateGallery from './components/TemplateGallery'
+import AlignmentTools from './components/AlignmentTools'
+// import PenTool, { CustomPath, PathPoint } from './components/PenTool'
+import type { CustomPath, PathPoint } from './components/PenTool'; // Import types
 import dynamic from 'next/dynamic'
 import { v4 as uuidv4 } from 'uuid'
 import type Konva from 'konva'; // Import Konva for types
@@ -18,43 +22,109 @@ const DesignCanvas = dynamic(() => import('./components/DesignCanvas'), {
   loading: () => <p className="flex-1 flex items-center justify-center text-gray-500">Loading Canvas...</p>
 })
 
+const PenTool = dynamic(() => import('./components/PenTool'), { // Dynamically import PenTool
+  ssr: false,
+  // You can add a loading component for PenTool if desired
+  // loading: () => <p>Loading Pen Tool...</p> 
+});
+
+// Helper to convert PenTool's CustomPath to CanvasElement pathData
+const getPathDataFromCustomPath = (path: CustomPath): string => {
+  if (path.points.length < 1) return '';
+  let pathData = `M ${path.points[0].x} ${path.points[0].y}`;
+  for (let i = 1; i < path.points.length; i++) {
+    const prevPoint = path.points[i - 1];
+    const point = path.points[i];
+    if (prevPoint.controlOut && point.controlIn) {
+      pathData += ` C ${prevPoint.controlOut.x} ${prevPoint.controlOut.y}, ${point.controlIn.x} ${point.controlIn.y}, ${point.x} ${point.y}`;
+    } else { // If no control points, draw a straight line segment
+      pathData += ` L ${point.x} ${point.y}`;
+    }
+  }
+  if (path.closed && path.points.length > 1) {
+     const lastPoint = path.points[path.points.length - 1];
+     const firstPoint = path.points[0];
+     if (lastPoint.controlOut && firstPoint.controlIn) {
+       pathData += ` C ${lastPoint.controlOut.x} ${lastPoint.controlOut.y}, ${firstPoint.controlIn.x} ${firstPoint.controlIn.y}, ${firstPoint.x} ${firstPoint.y}`;
+     }
+    pathData += ' Z';
+  }
+  return pathData;
+};
+
 export default function Home() {
   const [selectedElement, setSelectedElement] = useState<CanvasElement | null>(null)
+  const [selectedElements, setSelectedElements] = useState<CanvasElement[]>([])
   
-  // Load saved elements from localStorage
   const savedElements = typeof window !== 'undefined' ? loadFromLocalStorage<CanvasElement[]>('seamless-design-elements', []) : []
   const { state: elements, setState: setElements, undo, redo, canUndo, canRedo } = useHistory<CanvasElement[]>(savedElements)
   
   const [tool, setTool] = useState('select')
   const [showExportPanel, setShowExportPanel] = useState(false)
+  const [showTemplateGallery, setShowTemplateGallery] = useState(false)
   const [showLayersPanel, setShowLayersPanel] = useState(true)
   const stageRef = useRef<Konva.Stage>(null)
   const [clipboard, setClipboard] = useState<Omit<CanvasElement, 'id'> | null>(null)
   
-  // Auto-save elements to localStorage
-  useAutoSave('seamless-design-elements', elements, 2000) // Save every 2 seconds
+  useAutoSave('seamless-design-elements', elements, 2000)
 
-  // State for line drawing
   const [isDrawingLine, setIsDrawingLine] = useState(false)
   const [currentLine, setCurrentLine] = useState<CanvasElement | null>(null)
 
-  // State for Zoom and Pan
+  const [currentPathElement, setCurrentPathElement] = useState<CustomPath | null>(null)
+
   const [stageScale, setStageScale] = useState(1)
   const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 })
 
-  // Detect if user is on Mac
   const isMac = typeof window !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0
 
-  const handleAddElement = (element: CanvasElement) => {
-    // For new lines, ensure isNew is not set if we used it for text previously
-    const elToAdd = element.type === 'line' ? { ...element, isNew: undefined } : element
-    setElements([...elements, elToAdd])
+  const handleAddElement = (element: CanvasElement | CustomPath) => {
+    if ('points' in element && !('type' in element)) { 
+      const path = element as CustomPath;
+      const newPathElement: CanvasElement = {
+        id: path.id,
+        type: 'path',
+        x: 0, 
+        y: 0,
+        pathData: getPathDataFromCustomPath(path),
+        fill: path.fill || '#000000',
+        stroke: path.stroke || '#000000',
+        strokeWidth: path.strokeWidth || 2,
+        closed: path.closed,
+        opacity: 1,
+        rotation: 0,
+      };
+      setElements([...elements, newPathElement]);
+      setSelectedElement(newPathElement);
+      setCurrentPathElement(null); 
+      setTool('select'); 
+    } else { 
+      const canvasEl = element as CanvasElement;
+      const elToAdd = canvasEl.type === 'line' ? { ...canvasEl, isNew: undefined } : canvasEl;
+      setElements([...elements, elToAdd]);
+    }
   }
 
+  const handleUpdatePathElement = (path: CustomPath) => {
+    setCurrentPathElement(path);
+  };
+
   const handleUpdateElement = (id: string, newProps: Partial<CanvasElement>) => {
-    setElements(
-      elements.map((el) => (el.id === id ? { ...el, ...newProps } : el))
-    )
+    const updatedElements = elements.map((el) => 
+      el.id === id ? { ...el, ...newProps } : el
+    );
+    setElements(updatedElements);
+
+    // Find the updated element and update selectedElement state
+    const newlyUpdatedElement = updatedElements.find(el => el.id === id);
+    if (newlyUpdatedElement) {
+      setSelectedElement(newlyUpdatedElement);
+      // If it was part of multi-selection, update that array too
+      // (though PropertyPanel typically edits one at a time)
+      setSelectedElements(prevSelected => 
+        prevSelected.map(sel => sel.id === id ? newlyUpdatedElement : sel)
+      );
+    }
   }
 
   const handleDeleteElement = (id: string) => {
@@ -64,13 +134,24 @@ export default function Home() {
     }
   }
 
-  const handleSelectElement = (element: CanvasElement | null) => {
-    setSelectedElement(element)
-    if (element && element.type === 'text' && element.isNew) {
-      // If we select a new text element, we might want to remove the isNew flag
-      // so it doesn't re-trigger auto-edit if re-selected before editing.
-      // This depends on the exact auto-edit trigger logic in TextElement.
-      // For now, let isNew be handled by TextElement.
+  const handleSelectElement = (element: CanvasElement | null, isMultiSelect?: boolean) => {
+    if (!element) {
+      setSelectedElement(null)
+      setSelectedElements([])
+    } else if (isMultiSelect) {
+      const isAlreadySelected = selectedElements.some(el => el.id === element.id)
+      if (isAlreadySelected) {
+        const newSelection = selectedElements.filter(el => el.id !== element.id)
+        setSelectedElements(newSelection)
+        setSelectedElement(newSelection.length > 0 ? newSelection[newSelection.length - 1] : null)
+      } else {
+        const newSelection = [...selectedElements, element]
+        setSelectedElements(newSelection)
+        setSelectedElement(element)
+      }
+    } else {
+      setSelectedElement(element)
+      setSelectedElements([element])
     }
   }
 
@@ -117,9 +198,6 @@ export default function Home() {
         y: (clipboard.y || 0) + 20,
         isNew: clipboard.type === 'text' ? true : undefined,
       }
-      // If pasting a line, ensure its points are relative to its new x, y if needed
-      // Or, better, lines might not need x,y if points are absolute.
-      // For simplicity, let's assume points are absolute and x,y are for the group/transformer.
       setElements([...elements, newElement])
       setSelectedElement(newElement)
     }
@@ -141,12 +219,44 @@ export default function Home() {
     }
   }
 
+  const handleSelectTemplate = (template: any) => {
+    setElements(template.elements)
+    setSelectedElement(null)
+    setSelectedElements([])
+  }
+
+  const handleUpdateMultipleElements = (updates: { id: string; props: Partial<CanvasElement> }[]) => {
+    const newElements = [...elements]
+    updates.forEach(({ id, props }) => {
+      const index = newElements.findIndex(el => el.id === id)
+      if (index !== -1) {
+        newElements[index] = { ...newElements[index], ...props }
+      }
+    })
+    setElements(newElements)
+  }
+
+  const getPointerPositionOnStage = (): { x: number; y: number } | null => {
+    const stage = stageRef.current;
+    if (!stage) return null;
+    const pointerPos = stage.getPointerPosition();
+    if (!pointerPos) return null;
+    return {
+      x: (pointerPos.x - stage.x()) / stage.scaleX(),
+      y: (pointerPos.y - stage.y()) / stage.scaleY(),
+    };
+  };
+
+  useEffect(() => {
+    if (tool !== 'pen' && currentPathElement) {
+      setCurrentPathElement(null); 
+    }
+  }, [tool, currentPathElement]);
+
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Delete key handled in DesignCanvas for selected Konva element
-      // Copy, Paste, Duplicate
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-        return // Don't interfere with text input
+        return 
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -157,7 +267,7 @@ export default function Home() {
         e.preventDefault()
         if (canRedo) redo()
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') { // Also handle Ctrl+Y for redo
         e.preventDefault()
         if (canRedo) redo()
       }
@@ -179,8 +289,8 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown)
     }
-  }, [selectedElement, clipboard, elements, undo, redo, canUndo, canRedo]) // Dependencies for C/P/D
-
+  }, [selectedElement, clipboard, elements, undo, redo, canUndo, canRedo, handleCopy, handlePaste, handleDuplicate]) // Added missing dependencies 
+  
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
       {/* Enhanced Header */}
@@ -232,6 +342,17 @@ export default function Home() {
           </div>
 
           <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
+
+          {/* Template Gallery Button */}
+          <button
+            onClick={() => setShowTemplateGallery(true)}
+            className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors shadow-sm flex items-center space-x-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+            </svg>
+            <span>Templates</span>
+          </button>
 
           {/* Keyboard Shortcuts Info */}
           <div className="hidden lg:flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
@@ -308,33 +429,59 @@ export default function Home() {
         {/* Canvas Area */}
         <div className="flex-1 bg-gray-100 dark:bg-gray-800 overflow-auto relative">
           <div className="absolute inset-0 p-6">
-            <div className="w-full h-full bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <DesignCanvas
-                elements={elements}
-                selectedElement={selectedElement}
-                tool={tool}
-                onSelect={handleSelectElement}
-                onUpdate={handleUpdateElement}
-                onAddElement={handleAddElement}
-                onDelete={handleDeleteElement}
-                stageRef={stageRef}
-                isDrawingLine={isDrawingLine} 
-                setIsDrawingLine={setIsDrawingLine} 
-                currentLine={currentLine} 
-                setCurrentLine={setCurrentLine}
-                setTool={setTool}
-                // Zoom and Pan props
-                stageScale={stageScale}
-                setStageScale={setStageScale}
-                stagePosition={stagePosition}
-                setStagePosition={setStagePosition}
-              />
+            <div className="w-full h-full bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+              {selectedElements.length > 1 && (
+                <AlignmentTools
+                  selectedElements={selectedElements}
+                  onUpdateElements={handleUpdateMultipleElements}
+                />
+              )}
+              <div className="flex-1 relative">
+                <DesignCanvas
+                  elements={elements}
+                  selectedElement={selectedElement}
+                  selectedElements={selectedElements}
+                  tool={tool}
+                  onSelect={handleSelectElement}
+                  onUpdate={handleUpdateElement}
+                  onAddElement={handleAddElement as (element: CanvasElement) => void}
+                  onDelete={handleDeleteElement}
+                  stageRef={stageRef}
+                  isDrawingLine={isDrawingLine} 
+                  setIsDrawingLine={setIsDrawingLine} 
+                  currentLine={currentLine} 
+                  setCurrentLine={setCurrentLine}
+                  setTool={setTool}
+                  stageScale={stageScale}
+                  setStageScale={setStageScale}
+                  stagePosition={stagePosition}
+                  setStagePosition={setStagePosition}
+                />
+                {tool === 'pen' && stageRef.current && (
+                  <div 
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ 
+                        width: stageRef.current.width() * stageScale, 
+                        height: stageRef.current.height() * stageScale,
+                        transform: `translate(${stagePosition.x}px, ${stagePosition.y}px) scale(${stageScale})`,
+                        transformOrigin: 'top left'
+                    }}
+                  >
+                    <PenTool
+                      onPathComplete={(path) => handleAddElement(path)}
+                      currentPath={currentPathElement}
+                      onUpdatePath={handleUpdatePathElement}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
         
         <PropertyPanel
           selectedElement={selectedElement}
+          selectedElements={selectedElements}
           onUpdate={handleUpdateElement}
           onDelete={handleDeleteElement}
           onBringForward={handleBringForward}
@@ -359,6 +506,12 @@ export default function Home() {
           onClose={() => setShowExportPanel(false)} 
         />
       )}
+      
+      <TemplateGallery
+        isOpen={showTemplateGallery}
+        onClose={() => setShowTemplateGallery(false)}
+        onSelectTemplate={handleSelectTemplate}
+      />
     </div>
   )
 }

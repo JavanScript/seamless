@@ -54,6 +54,14 @@ const ExportPanel: React.FC<ExportPanelProps> = ({ stageRef, onClose }) => {
     // Get the current stage
     const stage = stageRef.current
     
+    // Store current scale and position
+    const oldScale = stage.scaleX()
+    const oldPosition = stage.position()
+    
+    // Reset scale and position for export
+    stage.scale({ x: 1, y: 1 })
+    stage.position({ x: 0, y: 0 })
+    
     // Create a high-resolution export
     const dataURL = stage.toDataURL({
       pixelRatio: 2,
@@ -62,6 +70,10 @@ const ExportPanel: React.FC<ExportPanelProps> = ({ stageRef, onClose }) => {
       width: exportWidth,
       height: exportHeight
     })
+    
+    // Restore original scale and position
+    stage.scale({ x: oldScale, y: oldScale })
+    stage.position(oldPosition)
 
     // Create a temporary link and trigger download
     if (downloadLinkRef.current) {

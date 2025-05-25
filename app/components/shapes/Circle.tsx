@@ -6,7 +6,7 @@ import { Circle as KonvaCircle } from 'react-konva'
 interface CircleProps {
   shapeProps: any
   isSelected: boolean
-  onSelect: () => void
+  onSelect: (e?: any) => void
   onChange: (props: any) => void
 }
 

@@ -6,7 +6,7 @@ import { Text, Transformer } from 'react-konva'
 interface TextElementProps {
   shapeProps: any
   isSelected: boolean
-  onSelect: () => void
+  onSelect: (e?: any) => void
   onChange: (props: any) => void
   isNew?: boolean
 }
@@ -86,13 +86,18 @@ const TextElement: React.FC<TextElementProps> = ({
     const textNode = shapeRef.current
     if (!textNode) return
 
-    const textPosition = textNode.absolutePosition()
-    const stageElement = textNode.getStage().container()
+    const stage = textNode.getStage()
+    if (!stage) return
 
-    // Calculate position relative to the stage
+    const textPosition = textNode.absolutePosition()
+    const stageBox = stage.container().getBoundingClientRect()
+    const stageScale = stage.scaleX() // Assuming uniform scale
+    const stagePos = stage.position()
+
+    // Calculate position relative to the viewport, accounting for stage scale and position
     const areaPosition = {
-      x: textPosition.x,
-      y: textPosition.y,
+      x: stageBox.left + (textPosition.x * stageScale) + stagePos.x,
+      y: stageBox.top + (textPosition.y * stageScale) + stagePos.y,
     }
 
     // Create textarea
@@ -100,12 +105,12 @@ const TextElement: React.FC<TextElementProps> = ({
     document.body.appendChild(textarea)
 
     textarea.value = shapeProps.text
-    textarea.style.position = 'absolute'
+    textarea.style.position = 'fixed' // Use fixed positioning
     textarea.style.top = `${areaPosition.y}px`
     textarea.style.left = `${areaPosition.x}px`
-    textarea.style.width = `${textNode.width() - textNode.padding() * 2}px`
-    textarea.style.height = `${textNode.height() - textNode.padding() * 2}px`
-    textarea.style.fontSize = `${shapeProps.fontSize}px`
+    textarea.style.width = `${(textNode.width() - textNode.padding() * 2) * stageScale}px`
+    textarea.style.height = `${(textNode.height() - textNode.padding() * 2) * stageScale}px`
+    textarea.style.fontSize = `${shapeProps.fontSize * stageScale}px`
     textarea.style.border = 'none'
     textarea.style.padding = '0px'
     textarea.style.margin = '0px'
@@ -121,6 +126,8 @@ const TextElement: React.FC<TextElementProps> = ({
     textarea.style.fontWeight = shapeProps.fontStyleBold ? 'bold' : 'normal'
     textarea.style.fontStyle = shapeProps.fontStyleItalic ? 'italic' : 'normal'
     textarea.style.textDecoration = shapeProps.textDecorationUnderline ? 'underline' : 'none'
+    textarea.style.transform = `rotate(${textNode.rotation()}deg)`
+    textarea.style.zIndex = '9999'
 
     textarea.focus()
 

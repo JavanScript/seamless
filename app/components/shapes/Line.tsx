@@ -7,7 +7,7 @@ import type Konva from 'konva'
 interface LineProps {
   shapeProps: any
   isSelected: boolean
-  onSelect: () => void
+  onSelect: (e?: any) => void
   onChange: (props: any) => void
 }
 
